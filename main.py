@@ -1,7 +1,56 @@
 import os
 import datetime
+import threading
+from flask import Flask
 import discord
 from discord.ext import commands
+
+app = Flask('')
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_webserver():
+    # Render automatically assigns a PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run_webserver)
+    t.start()
+# --------------------------------------
+
+intents = discord.Intents.default()
+intents.members = True          
+intents.message_content = True  
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user.name}")
+
+# [YOUR MODERATION COMMANDS GO HERE - KEEP THE EXACT SAME BAN/KICK CODE]
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, delete_days: int = 1, *, reason=None):
+    seconds = delete_days * 86400
+    await member.ban(delete_message_seconds=seconds, reason=reason)
+    await ctx.send(f"🔨 {member.mention} banned.")
+
+# --- START BOTH SERVICES ---
+if __name__ == "__main__":
+    # Start the web server so Render stays happy
+    keep_alive()
+    
+    # Start the Discord Bot
+    TOKEN = os.environ.get("DISCORD_TOKEN")
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("ERROR: 'DISCORD_TOKEN' environment variable missing.")
+
 
 # 1. Setup bot with required privileged intents
 intents = discord.Intents.default()
@@ -9,6 +58,7 @@ intents.members = True          # Required to manage members, nicknames, and tim
 intents.message_content = True  # Required to read text commands
 
 bot = commands.Bot(command_prefix="%", intents=intents)
+bot.remove_command(help)
 
 @bot.event
 async def on_ready():
