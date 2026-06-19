@@ -69,7 +69,7 @@ async def ban(ctx, member: discord.Member, delete_days: int = 1, *, reason=None)
     # 86400 seconds = 1 day
     seconds = delete_days * 86400
     await member.ban(delete_message_seconds=seconds, reason=reason)
-    await ctx.send(f"SUCCESS! {member.mention} has been banned. Messages cleared for past {delete_days} day(s). Reason: {reason}")
+    await ctx.send(f"SUCCESS! {member.mention} has been banned. Reason: {reason}")
 
 # 3. KICK COMMAND
 @bot.command()
