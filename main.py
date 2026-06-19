@@ -8,7 +8,7 @@ from discord.ext import commands
 app = Flask('')
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "bot alive = yes alive"
 
 def run_webserver():
     # Render automatically assigns a PORT environment variable
@@ -24,24 +24,20 @@ intents = discord.Intents.default()
 intents.members = True          
 intents.message_content = True  
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="%", intents=intents)
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}")
-
-# [YOUR MODERATION COMMANDS GO HERE - KEEP THE EXACT SAME BAN/KICK CODE]
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, delete_days: int = 1, *, reason=None):
     seconds = delete_days * 86400
     await member.ban(delete_message_seconds=seconds, reason=reason)
-    await ctx.send(f"🔨 {member.mention} banned.")
+    await ctx.send(f"SUCCESS! Banned {member.mention}.")
 
-# --- START BOTH SERVICES ---
 if __name__ == "__main__":
-    # Start the web server so Render stays happy
     keep_alive()
     
     # Start the Discord Bot
