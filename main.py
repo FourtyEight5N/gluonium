@@ -139,7 +139,7 @@ async def nickname(ctx, member: discord.Member, *, new_name=None):
 async def addrole(ctx, member: discord.Member, role: discord.Role):
 
     if not can_moderate(ctx.author, member):
-        return await ctx.send("Perm Error: That person can't get a role removed.")
+        return await ctx.send("Perm Error: That person can't get a role added.")
 
     try:
         await member.add_roles(role)
