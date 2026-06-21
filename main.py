@@ -85,7 +85,7 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
 # ----------------------------
 
 @bot.command()
-@commands.has_permissions(timeout_members=True)
+@commands.has_permissions(administrator=True)
 async def timeout(ctx, member: discord.Member, minutes: int, *, reason="No reason provided"):
 
     if not can_moderate(ctx.author, member):
