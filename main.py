@@ -85,7 +85,7 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
 # ----------------------------
 
 @bot.command()
-@commands.has_permissions(moderate_members=True)
+@commands.has_permissions(timeout_members=True)
 async def timeout(ctx, member: discord.Member, minutes: int, *, reason="No reason provided"):
 
     if not can_moderate(ctx.author, member):
@@ -102,7 +102,7 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason="No reaso
         )
 
     except discord.Forbidden:
-        await ctx.send("Perm Error: I don't have the permission (moderate_members) needed for this.")
+        await ctx.send("Perm Error: I don't have the permission (timeout_members) needed for this.")
 
 # ----------------------------
 # NICKNAME
