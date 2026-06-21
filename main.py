@@ -102,7 +102,7 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason="No reaso
         )
 
     except discord.Forbidden:
-        await ctx.send("Perm Error: I don't have the permission (timeout_members) needed for this.")
+        await ctx.send("Perm Error: ...Did you not add administrator to me? How? My OAuth2 LITERALLY adds adminstrator.")
 
 # ----------------------------
 # NICKNAME
