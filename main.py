@@ -340,14 +340,16 @@ async def removerole(
 @app_commands.guild_only()
 async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(
-        "## Gluonium Commands"
-        "`/ban member delete_days reason`\n"
-        "`/kick member reason`\n"
-        "`/timeout member minutes reason`\n"
-        "`/nickname member new_name`\n"
-        "`/addrole member role`\n"
-        "`/removerole member role`\n"
-        "`/help`"
+        "## Gluonium's commands\n"
+        "-# [text] - required
+        "-# (text) - optional"
+        "`/ban [member] (delete_days) (reason)` - Bans someone\n"
+        "`/kick [member] (reason)` - Kicks someone\n"
+        "`/timeout [member] [minutes] (reason)` - Times out someone\n"
+        "`/nickname [member] (new_name)` - Nicknames someone (leave `new_name` blank to reset nickname)\n"
+        "`/addrole [member] (role)` - Gives someone a role\n"
+        "`/removerole [member] (role)` - Removes a role from someone \n"
+        "`/help` - Shows this prompt"
     )
 
 
