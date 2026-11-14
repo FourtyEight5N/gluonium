@@ -341,8 +341,8 @@ async def removerole(
 async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(
         "## Gluonium's commands\n"
-        "-# [text] - required
-        "-# (text) - optional"
+        "-# [text] - required\n"
+        "-# (text) - optional\n"
         "`/ban [member] (delete_days) (reason)` - Bans someone\n"
         "`/kick [member] (reason)` - Kicks someone\n"
         "`/timeout [member] [minutes] (reason)` - Times out someone\n"
