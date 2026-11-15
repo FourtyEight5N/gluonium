@@ -1,5 +1,7 @@
 
 import os
+import json
+import uuid
 import datetime
 import threading
 
@@ -37,7 +39,7 @@ intents = discord.Intents.default()
 intents.members = True
 
 bot = commands.Bot(
-    command_prefix="%",  # No longer used for moderation commands
+    command_prefix="%",
     intents=intents
 )
 
@@ -48,8 +50,6 @@ async def on_ready():
     print("Gluonium online = true")
 
 
-# Sync slash commands once during startup.
-# Global commands can take some time to appear in Discord.
 async def setup_hook():
     synced = await bot.tree.sync()
     print(f"Synced {len(synced)} slash command(s).")
@@ -59,11 +59,439 @@ bot.setup_hook = setup_hook
 
 
 # ----------------------------
+# ALERT SYSTEM CONFIGURATION
+# ----------------------------
+
+ALERT_ADMIN_IDS = {
+    1253782244430970972,
+    1559219425612144733,
+}
+
+ALERTS_FILE = os.environ.get(
+    "ALERTS_FILE",
+    "alerts.json"
+)
+
+ALERT_DATA = {
+    "channel_id": None,
+    "announcements": {}
+}
+
+
+def load_alert_data():
+    global ALERT_DATA
+
+    try:
+        with open(ALERTS_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if isinstance(data, dict):
+            ALERT_DATA.update(data)
+
+    except FileNotFoundError:
+        print("Alert storage not found. Creating new storage.")
+
+    except (json.JSONDecodeError, OSError) as error:
+        print(f"Alert storage error: {error}")
+
+
+def save_alert_data():
+    directory = os.path.dirname(os.path.abspath(ALERTS_FILE))
+    os.makedirs(directory, exist_ok=True)
+
+    temporary_file = ALERTS_FILE + ".tmp"
+
+    with open(temporary_file, "w", encoding="utf-8") as file:
+        json.dump(ALERT_DATA, file, indent=4)
+
+    os.replace(temporary_file, ALERTS_FILE)
+
+
+def is_alert_admin(interaction: discord.Interaction):
+    return interaction.user.id in ALERT_ADMIN_IDS
+
+
+async def require_alert_admin(interaction: discord.Interaction):
+    if not is_alert_admin(interaction):
+        await interaction.response.send_message(
+            "Perm Error: You are not authorized to manage Gluonium alerts.",
+            ephemeral=True
+        )
+        return False
+
+    return True
+
+
+# ----------------------------
+# ALERT EMBED BUILDER
+# ----------------------------
+
+ALERT_STYLES = {
+    "info": {
+        "name": "Information",
+        "color": discord.Color.blue()
+    },
+    "warning": {
+        "name": "Warning",
+        "color": discord.Color.orange()
+    },
+    "critical": {
+        "name": "Critical",
+        "color": discord.Color.red()
+    }
+}
+
+
+def create_alert_embed(title, message, severity, alert_id):
+    style = ALERT_STYLES[severity]
+
+    embed = discord.Embed(
+        title=title,
+        description=message,
+        color=style["color"],
+        timestamp=datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    embed.set_footer(
+        text=f"Gluonium Global Alert • ID: {alert_id}"
+    )
+
+    embed.add_field(
+        name="Severity",
+        value=style["name"],
+        inline=True
+    )
+
+    return embed
+
+
+# ----------------------------
+# GLOBAL ALERT COMMAND GROUP
+# ----------------------------
+
+alert_group = app_commands.Group(
+    name="alert",
+    description="Manage Gluonium global announcements"
+)
+
+
+# ----------------------------
+# /ALERT CHANNEL
+# ----------------------------
+
+@alert_group.command(
+    name="channel",
+    description="Sets the global announcement channel"
+)
+@app_commands.guild_only()
+@app_commands.describe(
+    channel="The channel where global announcements will be posted"
+)
+async def alert_channel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel
+):
+    if not await require_alert_admin(interaction):
+        return
+
+    permissions = channel.permissions_for(channel.guild.me)
+
+    if not permissions.view_channel or not permissions.send_messages:
+        await interaction.response.send_message(
+            "Perm Error: I need permission to view and send messages "
+            "in that channel.",
+            ephemeral=True
+        )
+        return
+
+    if not permissions.embed_links:
+        await interaction.response.send_message(
+            "Perm Error: I need permission to embed links in that channel.",
+            ephemeral=True
+        )
+        return
+
+    ALERT_DATA["channel_id"] = channel.id
+    save_alert_data()
+
+    await interaction.response.send_message(
+        f"SUCCESS! Global announcement channel set to {channel.mention}.",
+        ephemeral=True
+    )
+
+
+# ----------------------------
+# /ALERT PREVIEW
+# ----------------------------
+
+@alert_group.command(
+    name="preview",
+    description="Previews a global announcement without publishing it"
+)
+@app_commands.describe(
+    title="Announcement title",
+    message="Announcement message",
+    severity="Announcement severity"
+)
+@app_commands.choices(
+    severity=[
+        app_commands.Choice(name="Information", value="info"),
+        app_commands.Choice(name="Warning", value="warning"),
+        app_commands.Choice(name="Critical", value="critical")
+    ]
+)
+async def alert_preview(
+    interaction: discord.Interaction,
+    title: str,
+    message: str,
+    severity: app_commands.Choice[str]
+):
+    if not await require_alert_admin(interaction):
+        return
+
+    if len(title) > 256 or len(message) > 4000:
+        await interaction.response.send_message(
+            "Error: Title must be at most 256 characters and "
+            "message must be at most 4000 characters.",
+            ephemeral=True
+        )
+        return
+
+    embed = create_alert_embed(
+        title,
+        message,
+        severity.value,
+        "PREVIEW"
+    )
+
+    await interaction.response.send_message(
+        content="**Global alert preview:**",
+        embed=embed,
+        ephemeral=True
+    )
+
+
+# ----------------------------
+# /ALERT CREATE
+# ----------------------------
+
+@alert_group.command(
+    name="create",
+    description="Publishes a global announcement"
+)
+@app_commands.describe(
+    title="Announcement title",
+    message="Announcement message",
+    severity="Announcement severity"
+)
+@app_commands.choices(
+    severity=[
+        app_commands.Choice(name="Information", value="info"),
+        app_commands.Choice(name="Warning", value="warning"),
+        app_commands.Choice(name="Critical", value="critical")
+    ]
+)
+async def alert_create(
+    interaction: discord.Interaction,
+    title: str,
+    message: str,
+    severity: app_commands.Choice[str]
+):
+    if not await require_alert_admin(interaction):
+        return
+
+    if len(title) > 256 or len(message) > 4000:
+        await interaction.response.send_message(
+            "Error: Title must be at most 256 characters and "
+            "message must be at most 4000 characters.",
+            ephemeral=True
+        )
+        return
+
+    channel_id = ALERT_DATA.get("channel_id")
+
+    if not channel_id:
+        await interaction.response.send_message(
+            "Config Error: No global announcement channel has been set. "
+            "Use `/alert channel` first.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    channel = bot.get_channel(channel_id)
+
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except discord.NotFound:
+            await interaction.followup.send(
+                "Config Error: The configured announcement channel "
+                "no longer exists.",
+                ephemeral=True
+            )
+            return
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "Perm Error: I cannot access the configured channel.",
+                ephemeral=True
+            )
+            return
+
+    if not isinstance(channel, discord.TextChannel):
+        await interaction.followup.send(
+            "Config Error: The configured destination is not a text channel.",
+            ephemeral=True
+        )
+        return
+
+    alert_id = uuid.uuid4().hex[:8].upper()
+
+    embed = create_alert_embed(
+        title,
+        message,
+        severity.value,
+        alert_id
+    )
+
+    try:
+        sent_message = await channel.send(
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    except discord.Forbidden:
+        await interaction.followup.send(
+            "Perm Error: I cannot send announcements to the configured channel.",
+            ephemeral=True
+        )
+        return
+
+    except discord.HTTPException as error:
+        print(f"Alert publishing error: {error}")
+
+        await interaction.followup.send(
+            "Error: Discord rejected the announcement.",
+            ephemeral=True
+        )
+        return
+
+    ALERT_DATA["announcements"][alert_id] = {
+        "title": title,
+        "message": message,
+        "severity": severity.value,
+        "channel_id": channel.id,
+        "message_id": sent_message.id,
+        "created_at": datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat(),
+        "created_by": interaction.user.id
+    }
+
+    try:
+        save_alert_data()
+    except OSError as error:
+        print(f"Alert storage error: {error}")
+
+        await interaction.followup.send(
+            f"WARNING: Announcement was published, but its data "
+            f"could not be saved. Alert ID: `{alert_id}`",
+            ephemeral=True
+        )
+        return
+
+    await interaction.followup.send(
+        f"SUCCESS! Global announcement published in {channel.mention}.\n"
+        f"Announcement ID: `{alert_id}`",
+        ephemeral=True
+    )
+
+
+# ----------------------------
+# /ALERT DELETE
+# ----------------------------
+
+@alert_group.command(
+    name="delete",
+    description="Deletes a previously published global announcement"
+)
+@app_commands.describe(
+    announcement_id="The ID of the announcement to delete"
+)
+async def alert_delete(
+    interaction: discord.Interaction,
+    announcement_id: str
+):
+    if not await require_alert_admin(interaction):
+        return
+
+    announcement_id = announcement_id.upper()
+
+    announcement = ALERT_DATA["announcements"].get(announcement_id)
+
+    if announcement is None:
+        await interaction.response.send_message(
+            "ID Error: No announcement with that ID was found.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    channel_id = announcement["channel_id"]
+    message_id = announcement["message_id"]
+
+    channel = bot.get_channel(channel_id)
+
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except (discord.NotFound, discord.Forbidden):
+            channel = None
+
+    if channel is not None:
+        try:
+            message = await channel.fetch_message(message_id)
+            await message.delete()
+
+        except discord.NotFound:
+            pass
+
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "Perm Error: I cannot delete that announcement. "
+                "Check my channel permissions.",
+                ephemeral=True
+            )
+            return
+
+        except discord.HTTPException as error:
+            print(f"Alert deletion error: {error}")
+
+            await interaction.followup.send(
+                "Error: Discord rejected the deletion request.",
+                ephemeral=True
+            )
+            return
+
+    del ALERT_DATA["announcements"][announcement_id]
+    save_alert_data()
+
+    await interaction.followup.send(
+        f"SUCCESS! Announcement `{announcement_id}` has been deleted.",
+        ephemeral=True
+    )
+
+
+bot.tree.add_command(alert_group)
+
+
+# ----------------------------
 # SHARED HELPERS
 # ----------------------------
 
 def can_moderate(author: discord.Member, target: discord.Member):
-    # Preserve the original role hierarchy check.
     return author.id != target.id and author.top_role > target.top_role
 
 
@@ -346,9 +774,10 @@ async def help_command(interaction: discord.Interaction):
         "`/ban [member] (delete_days) (reason)` - Bans someone\n"
         "`/kick [member] (reason)` - Kicks someone\n"
         "`/timeout [member] [minutes] (reason)` - Times out someone\n"
-        "`/nickname [member] (new_name)` - Nicknames someone (leave `new_name` blank to reset nickname)\n"
+        "`/nickname [member] (new_name)` - Nicknames someone (leave `new_name` field blank to reset nickname)\n"
         "`/addrole [member] (role)` - Gives someone a role\n"
-        "`/removerole [member] (role)` - Removes a role from someone \n"
+        "`/removerole [member] (role)` - Removes a role\n"
+        "`/alert channel` - Sets the channel for announcements\n"
         "`/help` - Shows this prompt"
     )
 
@@ -369,7 +798,7 @@ async def on_app_command_error(
         message = "Server Error: This command can only be used in a server."
 
     elif isinstance(error, app_commands.CommandOnCooldown):
-        message = "Pls wait before using this command again."
+        message = "Cooldown Error: Pls wait before using this command again."
 
     else:
         print(f"Unlisted Slash Command Error: {error}")
@@ -386,6 +815,8 @@ async def on_app_command_error(
 # ----------------------------
 
 if __name__ == "__main__":
+    load_alert_data()
+
     keep_alive()
 
     TOKEN = os.environ.get("DISCORD_TOKEN")
